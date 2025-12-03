@@ -9,6 +9,7 @@ import threading
 import api_handler
 from urllib.parse import urlparse, parse_qs
 
+
 # --- 全局变量 ---
 # 用于防止图片被垃圾回收
 image_references = [] 
@@ -125,7 +126,6 @@ def thread_load_dashboard_data(window, loading_label):
     window.after(0, lambda: render_dashboard_ui(window, loading_label, items_data))
 
 def render_dashboard_ui(window, loading_label, items_data):
-    # ... (前面的代码保持不变，直到创建 card Frame) ...
     loading_label.destroy()
     container = tk.Frame(window)
     container.pack(expand=True, fill='both', padx=20, pady=20)
@@ -136,37 +136,41 @@ def render_dashboard_ui(window, loading_label, items_data):
         row = i // columns
         col = i % columns
         
-        # 绑定点击事件的函数
+        # 绑定点击事件
         click_command = lambda i=item["item_info"]: show_venue_page(i, window)
         
-        # 使用 Button 代替 Frame，更方便实现点击效果
-        card = tk.Button(container, bd=1, relief="raised", padx=10, pady=10, 
-                         command=click_command) # 绑定点击事件
-        card.grid(row=row, column=col, padx=10, pady=10, sticky="nsew")
+        # --- 修改开始：使用原生 compound 属性 ---
         
-        # 创建一个内部 Frame 来组织图片和文字
-        inner_frame = tk.Frame(card)
-        inner_frame.pack()
+        # 创建按钮，默认先设置文字和点击事件
+        # relief="raised" 是标准按钮样式
+        card = tk.Button(container, 
+                         text=item["name"], 
+                         command=click_command,
+                         font=("微软雅黑", 10),
+                         bg="#f0f0f0",
+                         bd=2,
+                         relief="raised",
+                         width=20,    # 限制宽度，防止文字过长撑乱布局
+                         height=6)    # 限制高度 (注意：如果有图片，单位是像素；无图片是字符数，Tkinter特性)
 
-        # 处理图片 (略有改动，在 inner_frame 中放置)
+        # 处理图片
         if item["img_bytes"]:
-            # ... (图片处理逻辑与之前类似，但父级设为 inner_frame) ...
             try:
                 pil_image = Image.open(io.BytesIO(item["img_bytes"]))
-                pil_image = pil_image.resize((64, 64), Image.Resampling.LANCZOS)
+                pil_image = pil_image.resize((50, 50), Image.Resampling.LANCZOS) #稍微缩小一点图片适应按钮
                 tk_image = ImageTk.PhotoImage(pil_image)
-                image_references.append(tk_image)
+                image_references.append(tk_image) # 防止回收
                 
-                img_label = tk.Label(inner_frame, image=tk_image)
-                img_label.pack()
+                # 关键设置：compound="top" 让图片位于文字上方
+                # 设置了 image 后，height/width 的单位会自动变为像素，所以这里需要重新调整一下尺寸感
+                card.config(image=tk_image, compound="top", height=100, width=150) 
             except Exception as e:
-                tk.Label(inner_frame, text="[图片错误]").pack()
-        else:
-            tk.Label(inner_frame, text="[无图]").pack()
-            
-        # 显示文字名称
-        name_label = tk.Label(inner_frame, text=item["name"], font=("微软雅黑", 12, "bold"), pady=5)
-        name_label.pack()
+                card.config(text=f"[图裂]\n{item['name']}")
+        
+        # 布局
+        card.grid(row=row, column=col, padx=10, pady=10)
+        
+        # --- 修改结束 ---
 
     for x in range(columns):
         container.grid_columnconfigure(x, weight=1)
@@ -187,8 +191,10 @@ def show_venue_page(item_info, parent_window):
     """
     
     # 假设我们请求的是今天的日期
-    from datetime import date
+    from datetime import date, timedelta
+    # 获取今天和明天（格式化为字符串）
     today = date.today().strftime("%Y-%m-%d")
+    tomorrow = (date.today() + timedelta(days=1)).strftime("%Y-%m-%d")
     
     # 隐藏主面板窗口
     parent_window.withdraw()
@@ -206,13 +212,13 @@ def show_venue_page(item_info, parent_window):
 
     # 启动线程请求场地数据
     threading.Thread(target=thread_fetch_venue_data, 
-                     args=(venue_window, loading_label, item_info, today)).start()
+                     args=(venue_window, loading_label, item_info, tomorrow)).start()
 
 def thread_fetch_venue_data(window, label, item_info, day):
     """后台请求场地数据并渲染"""
     
     success, result = api_handler.get_venue_data(item_info.item_type, item_info.evaluate_name, day)
-    
+    print("Fetched venue data:", success, result)
     window.after(0, label.destroy) # 移除加载提示
     
     if success:
