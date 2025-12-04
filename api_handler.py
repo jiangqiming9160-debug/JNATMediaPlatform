@@ -2,6 +2,7 @@ import requests
 import json
 import os
 from urllib.parse import quote
+from bs4 import BeautifulSoup
 
 # --- 配置 ---
 COOKIE_FILE = 'cookies.json'
@@ -187,6 +188,61 @@ def fetch_image_bytes(image_url):
     except:
         return None
     
+
+# 获取预订页面的配置信息 (日期和场地) 
+def get_booking_options(item_type):
+    """
+    访问 particulars 页面，解析可用的日期和场地名称
+    """
+    url = f"http://yyticket.jinanaoti.com/cd/particulars?type={item_type}"
+    # Referer 通常是列表页
+    referer = "http://yyticket.jinanaoti.com/CD/Index2"
+    
+    success, content = _make_request(url, referer, is_json=False)
+    
+    if not success:
+        return False, f"请求页面失败: {content}"
+    
+    try:
+        soup = BeautifulSoup(content, 'html.parser')
+        
+        # 1. 解析日期 (class="dataCont")
+        dates = []
+        date_cont = soup.find('div', class_='dataCont')
+        if date_cont:
+            for span in date_cont.find_all('span'):
+                day = span.get('data-day')
+                if day:
+                    dates.append(day)
+                    
+        # 2. 解析场地名称 (class="dataCont123")
+        areas = []
+        area_cont = soup.find('div', class_='dataCont123')
+        if area_cont:
+            for span in area_cont.find_all('span'):
+                # 获取 data-day 属性作为场地名称 (例如: 羽毛球北训场)
+                area_name = span.get('data-day')
+                if area_name:
+                    areas.append(area_name)
+        
+        if not dates:
+            return False, "未找到可用日期信息"
+        if not areas:
+            # 某些项目可能没有 dataCont123 (比如不需要选场地的)，做个兼容
+            # 但根据你的描述，这里必须要有
+            return False, "未找到场地名称信息"
+
+        return True, {
+            "dates": dates,       # 所有日期列表
+            "areas": areas,       # 所有场地列表
+            "default_date": dates[0], # 默认第一个
+            "default_area": areas[0]  # 默认第一个
+        }
+
+    except Exception as e:
+        return False, f"解析页面出错: {e}"
+
+
 def get_venue_data(item_type, evaluate_name, day):
     """
     获取某一运动项目在特定日期的场地数据
