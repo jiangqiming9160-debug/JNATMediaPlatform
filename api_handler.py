@@ -3,6 +3,8 @@ import json
 import os
 from urllib.parse import quote
 from bs4 import BeautifulSoup
+import datetime
+import random
 
 # --- 配置 ---
 COOKIE_FILE = 'cookies.json'
@@ -266,7 +268,62 @@ def get_venue_data(item_type, evaluate_name, day):
         
     # 假设 Code=1 表示成功
     if result.get("Code") == 1:
-        # 返回数据部分
-        return True, result.get("Data")
+        data = result.get("Data")
+        # 如果 Data 为空 或者 长度为0，视为无数据
+        if not data:
+            return True, generate_mock_venue_data(item_type, evaluate_name, day)
+        return True, data
     else:
         return False, result.get("Msg", "未知错误")
+    
+def get_next_7_days():
+    """获取今天开始的未来7天日期列表"""
+    dates = []
+    today = datetime.date.today()
+    for i in range(7):
+        d = today + datetime.timedelta(days=i)
+        dates.append(d.strftime("%Y-%m-%d"))
+    return dates    
+
+def generate_mock_venue_data(item_type, area_name, date):
+    """
+    当接口无数据时，生成模拟数据供测试 UI
+    """
+    print(f"警告：接口未返回数据，正在生成 {date} 的模拟数据...")
+    
+    mock_data = []
+    # 模拟 10 个场地
+    for i in range(1, 11):
+        court_name = f"{area_name} {i}号场(模拟)"
+        rtnlist = []
+        # 模拟 07:00 - 21:00
+        for hour in range(7, 22):
+            time_str = f"{hour:02d}:00"
+            
+            # 随机生成一些状态
+            status_rand = random.random()
+            c7 = "可预约"
+            c8 = "0" # 0未订, 1已订
+            desc = None
+            
+            if status_rand > 0.8:
+                c8 = "1" # 已占用
+            elif status_rand > 0.9:
+                c7 = "不可预约"
+            
+            rtnlist.append({
+                "TicketLevelName": time_str,
+                "MemberPrice": 40.0 if hour < 17 else 50.0,
+                "TicketTypeNo": f"mock_type_{i}",
+                "TicketLevelNo": f"mock_level_{hour}",
+                "CDefault7": c7,
+                "CDefault8": c8,
+                "Description": desc
+            })
+            
+        mock_data.append({
+            "name": court_name,
+            "rtnlist": rtnlist
+        })
+        
+    return mock_data
