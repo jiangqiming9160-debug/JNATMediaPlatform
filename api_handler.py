@@ -327,3 +327,48 @@ def generate_mock_venue_data(item_type, area_name, date):
         })
         
     return mock_data
+
+def save_user_phone(phone):
+    """登录成功后，将手机号强制写入 cookies.json 方便读取"""
+    cookies = load_cookies_from_file()
+    cookies['login_phone'] = phone
+    try:
+        with open(COOKIE_FILE, 'w', encoding='utf-8') as f:
+            json.dump(cookies, f, indent=4, ensure_ascii=False)
+    except Exception as e:
+        print(f"保存手机号失败: {e}")
+
+def get_current_user():
+    """获取当前存储的登录手机号，如果没有则返回 None"""
+    cookies = load_cookies_from_file()
+    return cookies.get('login_phone')
+
+def clear_login_info():
+    """注销：删除 cookie 文件"""
+    if os.path.exists(COOKIE_FILE):
+        try:
+            os.remove(COOKIE_FILE)
+        except Exception as e:
+            print(f"删除凭证失败: {e}")
+
+def validate_session():
+    """
+    尝试访问主页来验证 Cookie 是否过期。
+    返回: (bool) True=有效, False=失效
+    """
+    if not os.path.exists(COOKIE_FILE):
+        return False
+    
+    # 尝试请求主页，看是否包含特定元素（例如 "退出" 按钮或用户信息）
+    # 或者简单判断请求是否成功 (Code 200) 且没有重定向到登录页
+    success, html = get_dashboard_html()
+    if not success:
+        return False
+    
+    # 简单的关键词判断，根据实际页面特征调整
+    # 如果页面里包含了 "登录" 按钮的特征字符，说明 cookie 失效了
+    # 这里假设 get_dashboard_html 成功返回了内容且能解析出菜单，即视为有效
+    if "menuCont" in html: 
+        return True
+        
+    return False    
